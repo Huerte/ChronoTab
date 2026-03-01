@@ -1,0 +1,40 @@
+{
+  "name": "chronotab",
+  "displayName": "ChronoTab",
+  "description": "Tracks how long the user actively focuses on the currently open file tab",
+  "version": "1.0.0",
+  "publisher": "Huerte",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "views": {
+      "explorer": [
+        {
+          "type": "webview",
+          "id": "chronotab.timerView",
+          "name": "ChronoTab",
+          "icon": "$(clock)"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/node": "^18.x",
+    "@types/vscode": "^1.80.0",
+    "typescript": "^5.x"
+  }
+}
