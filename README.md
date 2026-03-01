@@ -1,6 +1,6 @@
 # ChronoTab
 
-A premium, offline-capable Visual Studio Code extension that strictly tracks your active focus time per file. It features a responsive, draggable Webview Panel with interactive Play, Pause, and Reset controls.
+A Visual Studio Code extension that tracks the duration a user actively focuses on a specific file tab. It monitors editor state changes and provides a dedicated Webview UI panel to display the active timer, along with basic controls to pause, resume, and reset the current session.
 
 ## Installation Guide
 
@@ -69,7 +69,7 @@ code --install-extension chronotab-1.0.0.vsix
 ---
 
 ### Features
-* **100% Offline Capability**: Uses natively bundled SVG icons.
-* **Responsive Design**: Automatically adapts its layout depending on where you drag the panel.
-* **Zero Flicker**: Background interval smoothly updates the UI without performance lag.
-* **Interactive Controls**: Manually pause, resume, or reset your focus session.
+* **Offline Functionality**: Bundles inline SVG assets rather than relying on external CDNs or web fonts.
+* **Responsive Panel Layout**: Built with a CSS Grid architecture that adjusts between horizontal and vertical viewing panes automatically.
+* **Asynchronous Updates**: Separates the interval tick logic from the UI rendering cycle via `webview.postMessage` integration.
+* **Component Controls**: Supports manual runtime pause, resume, and hard-reset functions mapped directly to the active editor state.
