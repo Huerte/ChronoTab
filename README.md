@@ -16,7 +16,6 @@
 
 ChronoTab provides a dedicated Webview UI panel to display your active timer, along with intuitive controls to pause, resume, and reset your current session. Designed to be offline-capable and highly responsive.
 
-- **Offline Functionality:** Bundles inline SVG assets rather than relying on external CDNs or web fonts.
 - **Responsive Panel Layout:** Built with a CSS Grid architecture that automatically adapts between horizontal and vertical viewing panes.
 - **Asynchronous Updates:** Separates the interval tick logic from the UI rendering cycle via robust `webview.postMessage` integration.
 - **Component Controls:** Supports manual runtime pause, resume, and hard-reset functions mapped directly to the active editor state.
