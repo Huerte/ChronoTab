@@ -1,8 +1,8 @@
 {
   "name": "chronotab",
   "displayName": "ChronoTab",
-  "description": "Tracks how long the user actively focuses on the currently open file tab",
-  "version": "1.0.0",
+  "description": "A Visual Studio Code extension that tracks time spent per file across projects, with persistent session storage and a focus analytics dashboard.",
+  "version": "2.0.0",
   "publisher": "Huerte",
   "engines": {
     "vscode": "^1.80.0"
@@ -15,13 +15,28 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "chronotab-sidebar",
+          "title": "ChronoTab",
+          "icon": "$(clock)"
+        }
+      ]
+    },
     "views": {
-      "explorer": [
+      "chronotab-sidebar": [
         {
           "type": "webview",
           "id": "chronotab.timerView",
-          "name": "ChronoTab",
+          "name": "Timer",
           "icon": "$(clock)"
+        },
+        {
+          "type": "webview",
+          "id": "chronotab.dashboardView",
+          "name": "Dashboard",
+          "icon": "$(graph)"
         }
       ]
     }
