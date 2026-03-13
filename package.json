@@ -1,8 +1,8 @@
 {
   "name": "chronotab",
   "displayName": "ChronoTab",
-  "description": "A Visual Studio Code extension that tracks time spent per file across projects, with persistent session storage and a focus analytics dashboard.",
-  "version": "2.0.0",
+  "description": "A VS Code extension that tracks per-file focus time across Git branches, with a real-time analytics dashboard, Pomodoro timer, idle detection, and CSV export.",
+  "version": "3.0.0",
   "publisher": "Huerte",
   "engines": {
     "vscode": "^1.80.0"
@@ -39,6 +39,30 @@
           "icon": "$(graph)"
         }
       ]
+    },
+    "configuration": {
+      "title": "ChronoTab",
+      "properties": {
+        "chronotab.idleTimeoutMinutes": {
+          "type": "number",
+          "default": 5,
+          "minimum": 1,
+          "maximum": 60,
+          "description": "Minutes of inactivity before ChronoTab automatically pauses background tracking."
+        },
+        "chronotab.pomodoroMinutes": {
+          "type": "number",
+          "default": 25,
+          "minimum": 1,
+          "maximum": 120,
+          "description": "Default duration in minutes for the Pomodoro countdown timer."
+        },
+        "chronotab.trackGitBranch": {
+          "type": "boolean",
+          "default": true,
+          "description": "Group tracked time by the active Git branch name."
+        }
+      }
     }
   },
   "scripts": {
