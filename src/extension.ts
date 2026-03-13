@@ -37,7 +37,7 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(onEditorChange));
 
     autoSaveInterval = setInterval(flushSession, 30_000);
-    dashboardInterval = setInterval(() => dashboardProvider.pushData(), 5_000);
+    dashboardInterval = setInterval(() => { syncTracking(); dashboardProvider.pushData(); }, 5_000);
 
     const editor = vscode.window.activeTextEditor;
     if (editor && editor.document.uri.scheme === 'file' && !editor.document.fileName.includes('.chronotab')) {
@@ -89,12 +89,20 @@ function beginTracking(fullPath: string) {
     timerProvider.push({ file: filename, stopwatch: formatTime(secs), running: wasStarted });
 }
 
-function pauseTracking() {
+function syncTracking() {
     if (activeFile && activeFileStartTime !== undefined) {
-        const elapsed = Math.floor((Date.now() - activeFileStartTime) / 1000);
-        accumulateFile(activeFile, elapsed);
-        activeFileStartTime = undefined;
+        const now = Date.now();
+        const elapsed = Math.floor((now - activeFileStartTime) / 1000);
+        if (elapsed > 0) {
+            accumulateFile(activeFile, elapsed);
+            activeFileStartTime = now;
+        }
     }
+}
+
+function pauseTracking() {
+    syncTracking();
+    activeFileStartTime = undefined;
 }
 
 function accumulateFile(filename: string, seconds: number) {
@@ -109,16 +117,13 @@ function accumulateFile(filename: string, seconds: number) {
 }
 
 function flushSession() {
-    pauseTracking();
+    syncTracking();
     if (workspaceRoot) {
         currentDate = storage.getTodayDateString();
         if (currentSession.date !== currentDate) {
             currentSession = storage.loadSession(workspaceRoot, currentDate);
         }
         storage.saveSession(workspaceRoot, currentSession);
-    }
-    if (activeFile) {
-        activeFileStartTime = Date.now();
     }
 }
 
