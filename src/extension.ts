@@ -14,7 +14,6 @@ let isIdle = false;
 const stopwatchPerFile = new Map<string, number>();
 const stopwatchRunningFiles = new Set<string>();
 let stopwatchInterval: NodeJS.Timeout | undefined;
-let autoSaveInterval: NodeJS.Timeout | undefined;
 let dashboardInterval: NodeJS.Timeout | undefined;
 let idleTimeout: NodeJS.Timeout | undefined;
 
@@ -56,8 +55,8 @@ export function activate(context: vscode.ExtensionContext) {
         if (e.affectsConfiguration('chronotab')) { resetIdleTimer(); }
     }));
 
-    autoSaveInterval = setInterval(flushSession, 30_000);
-    dashboardInterval = setInterval(() => { syncTracking(); dashboardProvider.pushData(); }, 5_000);
+    // autoSaveInterval = setInterval(flushSession, 30_000); // V4: Removed to save on exit only
+    dashboardInterval = setInterval(() => { syncTracking(); dashboardProvider.pushData(); }, 1_000);
 
     const editor = vscode.window.activeTextEditor;
     if (editor && editor.document.uri.scheme === 'file' && !editor.document.fileName.includes('.chronotab')) {
@@ -67,7 +66,6 @@ export function activate(context: vscode.ExtensionContext) {
     }
 }
 
-// ─── Idle Detection ──────────────────────────
 
 function onWindowStateChange(state: vscode.WindowState) {
     if (!state.focused) {
@@ -107,7 +105,22 @@ function resumeFromIdle() {
     resetIdleTimer();
 }
 
-// ─── Background Tracking ─────────────────────
+
+function onEditorChange() {
+    pauseTracking();
+
+function resumeFromIdle() {
+    if (!isIdle) { return; }
+    isIdle = false;
+    if (activeFile) {
+        activeFileStartTime = Date.now();
+        const wasStarted = stopwatchRunningFiles.has(activeFile);
+        if (wasStarted) { resumeStopwatchInterval(activeFile); }
+        if (pomodoroActive && !pomodoroInterval) { resumePomodoroInterval(); }
+        timerProvider.pushTimer({ file: activeFile, stopwatch: formatTime(stopwatchPerFile.get(activeFile) || 0), running: wasStarted, idle: false, pomodoro: pomodoroActive, pomodoroTime: pomodoroActive ? formatTime(pomodoroRemaining) : '' });
+    }
+    resetIdleTimer();
+}
 
 function onEditorChange() {
     syncTracking();
@@ -187,7 +200,6 @@ function flushSession() {
     }
 }
 
-// ─── Stopwatch ───────────────────────────────
 
 function startStopwatch() {
     if (!activeFile || stopwatchRunningFiles.has(activeFile) || isIdle) { return; }
@@ -222,7 +234,6 @@ function resetStopwatch() {
     }
 }
 
-// ─── Pomodoro ────────────────────────────────
 
 function startPomodoro(minutes?: number) {
     const dur = minutes || cfg('pomodoroMinutes', 25);
@@ -240,7 +251,15 @@ function resumePomodoroInterval() {
         if (pomodoroRemaining <= 0) {
             pomodoroRemaining = 0;
             stopPomodoro();
-            vscode.window.showInformationMessage('ChronoTab: Pomodoro complete! Time for a break.');
+            const cp = require('child_process');
+            if (process.platform === 'win32') {
+                cp.exec('powershell -c "[console]::beep(800, 500)"', () => {});
+            } else if (process.platform === 'darwin') {
+                cp.exec('afplay /System/Library/Sounds/Ping.aiff', () => {});
+            } else {
+                cp.exec('paplay /usr/share/sounds/freedesktop/stereo/complete.oga', () => {});
+            }
+            vscode.window.showInformationMessage('ChronoTab: Pomodoro complete! Time for a break.', { modal: true });
             return;
         }
         pushTimerState();
@@ -254,7 +273,6 @@ function stopPomodoro() {
     pushTimerState();
 }
 
-// ─── Helpers ─────────────────────────────────
 
 function pushTimerState() {
     const file = activeFile || 'No file';
@@ -283,15 +301,14 @@ function fmtDuration(seconds: number): string {
 
 export function deactivate() {
     pauseTracking();
-    flushSession();
-    if (autoSaveInterval) { clearInterval(autoSaveInterval); }
+    flushSession(); // V4: This is now the ONLY time we save to JSON disk
+    // if (autoSaveInterval) { clearInterval(autoSaveInterval); }
     if (stopwatchInterval) { clearInterval(stopwatchInterval); }
     if (dashboardInterval) { clearInterval(dashboardInterval); }
     if (pomodoroInterval) { clearInterval(pomodoroInterval); }
     if (idleTimeout) { clearTimeout(idleTimeout); }
 }
 
-// ─── Timer View ──────────────────────────────
 
 interface TimerState {
     file: string; stopwatch: string; running: boolean; idle: boolean;
@@ -323,7 +340,6 @@ class TimerViewProvider implements vscode.WebviewViewProvider {
     }
 }
 
-// ─── Dashboard View ──────────────────────────
 
 class DashboardViewProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = 'chronotab.dashboardView';
@@ -385,7 +401,6 @@ class DashboardViewProvider implements vscode.WebviewViewProvider {
     }
 }
 
-// ─── Static HTML: Timer ──────────────────────
 
 const TIMER_HTML = `<!DOCTYPE html>
 <html lang="en">
@@ -543,7 +558,6 @@ window.addEventListener('message', e => {
 </body>
 </html>`;
 
-// ─── Static HTML: Dashboard ──────────────────
 
 const DASHBOARD_HTML = `<!DOCTYPE html>
 <html lang="en">
