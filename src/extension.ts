@@ -12,7 +12,6 @@ let activeFileStartTime: number | undefined;
 const stopwatchPerFile = new Map<string, number>();
 const stopwatchRunningFiles = new Set<string>();
 let stopwatchInterval: NodeJS.Timeout | undefined;
-let autoSaveInterval: NodeJS.Timeout | undefined;
 let dashboardInterval: NodeJS.Timeout | undefined;
 
 let timerProvider: TimerViewProvider;
@@ -36,8 +35,8 @@ export function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(onEditorChange));
 
-    autoSaveInterval = setInterval(flushSession, 30_000);
-    dashboardInterval = setInterval(() => dashboardProvider.pushData(), 5_000);
+    // autoSaveInterval = setInterval(flushSession, 30_000); // V4: Removed to save on exit only
+    dashboardInterval = setInterval(() => { syncTracking(); dashboardProvider.pushData(); }, 1_000);
 
     const editor = vscode.window.activeTextEditor;
     if (editor && editor.document.uri.scheme === 'file' && !editor.document.fileName.includes('.chronotab')) {
@@ -46,6 +45,46 @@ export function activate(context: vscode.ExtensionContext) {
         setTimeout(() => timerProvider.push({ file: 'No file', stopwatch: '00:00', running: false }), 800);
     }
 }
+
+
+function onWindowStateChange(state: vscode.WindowState) {
+    if (!state.focused) {
+        goIdle();
+    } else {
+        resumeFromIdle();
+    }
+}
+
+function resetIdleTimer() {
+    if (isIdle) { resumeFromIdle(); }
+    if (idleTimeout) { clearTimeout(idleTimeout); }
+    const mins = cfg('idleTimeoutMinutes', 5);
+    idleTimeout = setTimeout(goIdle, mins * 60_000);
+}
+
+function goIdle() {
+    if (isIdle) { return; }
+    isIdle = true;
+    syncTracking();
+    activeFileStartTime = undefined;
+    timerProvider.pushTimer({ file: activeFile || 'No file', stopwatch: formatTime(stopwatchPerFile.get(activeFile || '') || 0), running: false, idle: true, pomodoro: pomodoroActive, pomodoroTime: pomodoroActive ? formatTime(pomodoroRemaining) : '' });
+    if (pomodoroInterval) { clearInterval(pomodoroInterval); pomodoroInterval = undefined; }
+    if (stopwatchInterval) { clearInterval(stopwatchInterval); stopwatchInterval = undefined; }
+}
+
+function resumeFromIdle() {
+    if (!isIdle) { return; }
+    isIdle = false;
+    if (activeFile) {
+        activeFileStartTime = Date.now();
+        const wasStarted = stopwatchRunningFiles.has(activeFile);
+        if (wasStarted) { resumeStopwatchInterval(activeFile); }
+        if (pomodoroActive && !pomodoroInterval) { resumePomodoroInterval(); }
+        timerProvider.pushTimer({ file: activeFile, stopwatch: formatTime(stopwatchPerFile.get(activeFile) || 0), running: wasStarted, idle: false, pomodoro: pomodoroActive, pomodoroTime: pomodoroActive ? formatTime(pomodoroRemaining) : '' });
+    }
+    resetIdleTimer();
+}
+
 
 function onEditorChange() {
     pauseTracking();
@@ -122,6 +161,7 @@ function flushSession() {
     }
 }
 
+
 function startStopwatch() {
     if (!activeFile || stopwatchRunningFiles.has(activeFile)) { return; }
     const filename = activeFile;
@@ -147,8 +187,55 @@ function resetStopwatch() {
     pauseStopwatch();
     if (activeFile) {
         stopwatchPerFile.set(activeFile, 0);
-        timerProvider.push({ file: activeFile, stopwatch: '00:00', running: false });
+        pushTimerState();
     }
+}
+
+
+function startPomodoro(minutes?: number) {
+    const dur = minutes || cfg('pomodoroMinutes', 25);
+    pomodoroActive = true;
+    pomodoroRemaining = dur * 60;
+    if (pomodoroInterval) { clearInterval(pomodoroInterval); }
+    resumePomodoroInterval();
+    pushTimerState();
+}
+
+function resumePomodoroInterval() {
+    pomodoroInterval = setInterval(() => {
+        if (isIdle) { return; }
+        pomodoroRemaining--;
+        if (pomodoroRemaining <= 0) {
+            pomodoroRemaining = 0;
+            stopPomodoro();
+            const cp = require('child_process');
+            if (process.platform === 'win32') {
+                cp.exec('powershell -c "[console]::beep(800, 500)"', () => {});
+            } else if (process.platform === 'darwin') {
+                cp.exec('afplay /System/Library/Sounds/Ping.aiff', () => {});
+            } else {
+                cp.exec('paplay /usr/share/sounds/freedesktop/stereo/complete.oga', () => {});
+            }
+            vscode.window.showInformationMessage('ChronoTab: Pomodoro complete! Time for a break.', { modal: true });
+            return;
+        }
+        pushTimerState();
+    }, 1000);
+}
+
+function stopPomodoro() {
+    pomodoroActive = false;
+    pomodoroRemaining = 0;
+    if (pomodoroInterval) { clearInterval(pomodoroInterval); pomodoroInterval = undefined; }
+    pushTimerState();
+}
+
+
+function pushTimerState() {
+    const file = activeFile || 'No file';
+    const secs = file !== 'No file' ? (stopwatchPerFile.get(file) || 0) : 0;
+    const running = file !== 'No file' && stopwatchRunningFiles.has(file);
+    timerProvider.pushTimer({ file, stopwatch: formatTime(secs), running, idle: isIdle, pomodoro: pomodoroActive, pomodoroTime: pomodoroActive ? formatTime(pomodoroRemaining) : '' });
 }
 
 function formatTime(seconds: number): string {
@@ -170,13 +257,13 @@ function fmtDuration(seconds: number): string {
 }
 
 export function deactivate() {
-    flushSession();
-    if (autoSaveInterval) { clearInterval(autoSaveInterval); }
+    pauseTracking();
+    flushSession(); // V4: This is now the ONLY time we save to JSON disk
+    // if (autoSaveInterval) { clearInterval(autoSaveInterval); }
     if (stopwatchInterval) { clearInterval(stopwatchInterval); }
     if (dashboardInterval) { clearInterval(dashboardInterval); }
 }
 
-// ─── Timer View ──────────────────────────────
 
 interface UIState { file: string; stopwatch: string; running: boolean; }
 
@@ -208,7 +295,6 @@ class TimerViewProvider implements vscode.WebviewViewProvider {
     }
 }
 
-// ─── Dashboard View ──────────────────────────
 
 class DashboardViewProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = 'chronotab.dashboardView';
@@ -252,7 +338,6 @@ class DashboardViewProvider implements vscode.WebviewViewProvider {
     }
 }
 
-// ─── Static HTML Templates ──────────────────
 
 const TIMER_HTML = `<!DOCTYPE html>
 <html lang="en">
@@ -360,6 +445,7 @@ window.addEventListener('message', e => {
 </script>
 </body>
 </html>`;
+
 
 const DASHBOARD_HTML = `<!DOCTYPE html>
 <html lang="en">
